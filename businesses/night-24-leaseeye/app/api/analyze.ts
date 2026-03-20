@@ -55,7 +55,6 @@ function extractMoveInDate(text: string): string | null {
 }
 
 function extractPetPolicy(text: string): string | null {
-  const lc = text.toLowerCase();
   if (/no\s*pets?\s*(?:allowed|permitted|policy)/i.test(text) || /pets?\s*(?:are\s*)?(?:not|prohibited|strictly\s*(?:not|prohibited))/i.test(text)) {
     return "Not allowed";
   }
@@ -68,7 +67,7 @@ function extractPetPolicy(text: string): string | null {
   if (/pets?\s*(?:are\s*)?(?:allowed|permitted|welcome)/i.test(text)) {
     return "Allowed";
   }
-  if (/pet/i.test(lc)) {
+  if (/pet/i.test(text)) {
     return "Mentioned - review details";
   }
   return null;
@@ -133,7 +132,6 @@ interface RedFlag {
 
 function detectRedFlags(text: string, rent: string | null, deposit: string | null): RedFlag[] {
   const flags: RedFlag[] = [];
-  const lc = text.toLowerCase();
 
   // Excessive penalties
   if (/penalty\s*(?:of|:)?\s*(?:\$[\d,]+|[2-9]\s*months?\s*rent|\d+\s*months?\s*rent)/i.test(text)) {
@@ -145,7 +143,7 @@ function detectRedFlags(text: string, rent: string | null, deposit: string | nul
   }
 
   // Waived rights
-  if (/waive.*(?:right|claim|lawsuit|legal|court|jury|trial)/i.test(lc) || /(?:right|claim|lawsuit|legal|court|jury|trial).*waive/i.test(lc)) {
+  if (/waive.*(?:right|claim|lawsuit|legal|court|jury|trial)/i.test(text) || /(?:right|claim|lawsuit|legal|court|jury|trial).*waive/i.test(text)) {
     flags.push({
       title: "Waived Legal Rights",
       description: "The lease may require you to waive important legal rights.",
@@ -172,7 +170,7 @@ function detectRedFlags(text: string, rent: string | null, deposit: string | nul
   }
 
   // Liability waivers
-  if (/(?:landlord|owner|management)\s*(?:is\s*)?(?:not\s*(?:liable|responsible)|held\s*harmless)/i.test(text) || /hold\s*harmless/i.test(lc)) {
+  if (/(?:landlord|owner|management)\s*(?:is\s*)?(?:not\s*(?:liable|responsible)|held\s*harmless)/i.test(text) || /hold\s*harmless/i.test(text)) {
     flags.push({
       title: "Liability Waiver",
       description: "The lease limits the landlord's liability, which could leave you unprotected.",
@@ -185,6 +183,24 @@ function detectRedFlags(text: string, rent: string | null, deposit: string | nul
     flags.push({
       title: "Non-Refundable Fees",
       description: "The lease includes non-refundable fees that you cannot recover.",
+      severity: "medium",
+    });
+  }
+
+  // Mandatory arbitration
+  if (/mandatory\s*arbitration|binding\s*arbitration|agree\s*to\s*arbitrat/i.test(text)) {
+    flags.push({
+      title: "Mandatory Arbitration",
+      description: "Disputes must go through arbitration instead of court, which may limit your options.",
+      severity: "medium",
+    });
+  }
+
+  // Security deposit deduction vagueness
+  if (/deduct.*(?:any|all|reasonable|necessary)\s*(?:cost|expense|charge|amount)/i.test(text) && /deposit/i.test(text)) {
+    flags.push({
+      title: "Vague Security Deposit Deductions",
+      description: "The lease uses vague language about what can be deducted from your security deposit.",
       severity: "medium",
     });
   }
@@ -215,8 +231,8 @@ function detectRedFlags(text: string, rent: string | null, deposit: string | nul
       const lateFee = parseFloat(m[1].replace(/,/g, ""));
       if (lateFee > 100) {
         flags.push({
-          title: "High Late Fee",
-          description: `Late fee of $${m[1]} may be excessive.`,
+          title: "Excessive Late Fee",
+          description: `Late fee of $${m[1]} may be excessive and potentially unenforceable.`,
           severity: "medium",
         });
       }
@@ -226,48 +242,178 @@ function detectRedFlags(text: string, rent: string | null, deposit: string | nul
   return flags;
 }
 
-function extractClauses(text: string): { category: string; original: string; plainEnglish: string }[] {
-  const clauses: { category: string; original: string; plainEnglish: string }[] = [];
+function extractImportantDates(text: string): { label: string; value: string }[] {
+  const dates: { label: string; value: string }[] = [];
+  const datePattern = /(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s*\d{4}/gi;
+
+  // Lease start / move-in
+  const startMatch = text.match(/(?:commenc|begin|start|move[- ]?in)(?:ing|s|es)?\s*(?:on|date|:)?\s*(?:is\s*)?(?:on\s*)?((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s*\d{4})/i);
+  if (startMatch) dates.push({ label: "Lease Start", value: startMatch[1] });
+
+  // Lease end / expiration
+  const endMatch = text.match(/(?:expir|end|terminat)(?:es?|ing|ation)?\s*(?:on|date|:)?\s*(?:is\s*)?(?:on\s*)?((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s*\d{4})/i);
+  if (endMatch) dates.push({ label: "Lease End", value: endMatch[1] });
+
+  // Notice to vacate
+  const noticeMatch = text.match(/(?:notice\s*(?:to\s*)?vacat|vacat\w*\s*notice|written\s*notice)\w*\s*(?:of|by|before|within|at\s*least)?\s*(\d+)\s*(day|week|month)s?/i);
+  if (noticeMatch) dates.push({ label: "Notice to Vacate", value: `${noticeMatch[1]} ${noticeMatch[2]}s before lease end` });
+
+  // Rent increase notice
+  const rentIncreaseMatch = text.match(/rent\s*(?:increase|adjustment|raise)\s*(?:notice|notification)?\s*(?:of|by|:)?\s*(\d+)\s*(day|week|month)s?\s*(?:notice|prior|advance|before)/i);
+  if (rentIncreaseMatch) dates.push({ label: "Rent Increase Notice", value: `${rentIncreaseMatch[1]} ${rentIncreaseMatch[2]}s advance notice required` });
+
+  return dates;
+}
+
+function extractTenantRights(text: string): string[] {
+  const rights: string[] = [];
+
+  // Always include common rights
+  if (/24\s*hours?\s*notice|reasonable\s*notice|prior\s*notice/i.test(text)) {
+    rights.push("Right to advance notice before landlord entry (check your state for minimum requirements, typically 24-48 hours)");
+  }
+  if (/security\s*deposit|deposit/i.test(text)) {
+    rights.push("Right to receive an itemized list of security deposit deductions within the timeframe required by your state (typically 14-30 days)");
+  }
+  if (/habitable|habitability|safe\s*(?:and\s*)?(?:clean|livable)/i.test(text)) {
+    rights.push("Right to a habitable dwelling with working utilities, heat, and running water");
+  } else {
+    rights.push("Implied warranty of habitability: your landlord must maintain the unit in livable condition regardless of what the lease says");
+  }
+  if (/repair|maintenance|maintain/i.test(text)) {
+    rights.push("Right to request repairs for issues affecting health and safety, and to withhold rent in some states if critical repairs are ignored");
+  }
+  if (/retaliat/i.test(text)) {
+    rights.push("Protection against retaliatory eviction for exercising your legal rights");
+  } else {
+    rights.push("Most states protect tenants from retaliation (e.g., eviction for reporting code violations)");
+  }
+  if (/discriminat/i.test(text)) {
+    rights.push("Fair Housing Act protections against discrimination based on race, color, religion, sex, national origin, disability, or familial status");
+  }
+
+  return rights;
+}
+
+function generateQuestionsForLandlord(
+  rent: string | null,
+  deposit: string | null,
+  petPolicy: string | null,
+  flags: RedFlag[],
+  text: string
+): string[] {
+  const questions: string[] = [];
+
+  if (deposit) {
+    questions.push("What specific conditions must be met to receive my full security deposit back?");
+    questions.push("Can you provide a move-in inspection checklist to document existing damage?");
+  }
+
+  for (const flag of flags) {
+    if (/entry/i.test(flag.title)) {
+      questions.push("How much advance notice will you provide before entering my unit?");
+    }
+    if (/auto.*renew/i.test(flag.title)) {
+      questions.push("How far in advance do I need to notify you if I don't want to renew the lease?");
+    }
+    if (/terminat.*penalty/i.test(flag.title)) {
+      questions.push("Is the early termination fee negotiable, or can it be reduced?");
+    }
+    if (/late\s*fee/i.test(flag.title)) {
+      questions.push("Is there a grace period for rent payments before late fees apply?");
+    }
+    if (/non.*refundable/i.test(flag.title)) {
+      questions.push("Can the non-refundable fee be converted to a refundable deposit?");
+    }
+    if (/arbitration/i.test(flag.title)) {
+      questions.push("Can the mandatory arbitration clause be removed or amended?");
+    }
+  }
+
+  if (petPolicy === "Not allowed") {
+    questions.push("Is the no-pets policy negotiable for emotional support animals?");
+  }
+
+  if (!/utilit/i.test(text)) {
+    questions.push("Which utilities are included in rent, and which am I responsible for?");
+  }
+  if (!/parking/i.test(text)) {
+    questions.push("Is parking included? If not, what are the parking options and costs?");
+  }
+  if (!/subleas|sublet/i.test(text)) {
+    questions.push("What is your policy on subletting if I need to leave early?");
+  }
+  if (!/guest/i.test(text)) {
+    questions.push("Are there any restrictions on overnight guests?");
+  }
+
+  // Always good to ask
+  questions.push("What is the typical turnaround time for maintenance requests?");
+
+  return questions;
+}
+
+function extractClauses(text: string): { category: string; original: string; plainEnglish: string; status: "favorable" | "neutral" | "concern" }[] {
+  const clauses: { category: string; original: string; plainEnglish: string; status: "favorable" | "neutral" | "concern" }[] = [];
   const sentences = text.split(/(?<=[.!?])\s+/).filter((s) => s.trim().length > 10);
 
   for (const sentence of sentences) {
     const s = sentence.trim();
     const lc = s.toLowerCase();
 
+    let category = "";
     if (/rent|payment|deposit|\$\s?\d|fee|charge|cost/i.test(lc)) {
-      clauses.push({
-        category: "financial",
-        original: s,
-        plainEnglish: translateToPlainEnglish(s, "financial"),
-      });
+      category = "financial";
     } else if (/repair|maintain|maintenance|fix|condition|damage|wear/i.test(lc)) {
-      clauses.push({
-        category: "maintenance",
-        original: s,
-        plainEnglish: translateToPlainEnglish(s, "maintenance"),
-      });
+      category = "maintenance";
     } else if (/pet|noise|quiet|guest|park|smok|rule|prohibit|restrict|comply/i.test(lc)) {
-      clauses.push({
-        category: "rules",
-        original: s,
-        plainEnglish: translateToPlainEnglish(s, "rules"),
-      });
+      category = "rules";
     } else if (/terminat|cancel|break|end|vacat|evict|notice|renew|expir/i.test(lc)) {
-      clauses.push({
-        category: "termination",
-        original: s,
-        plainEnglish: translateToPlainEnglish(s, "termination"),
-      });
+      category = "termination";
     }
+
+    if (!category) continue;
+
+    const status = determineClauseStatus(s);
+    clauses.push({
+      category,
+      original: s,
+      plainEnglish: translateToPlainEnglish(s, category),
+      status,
+    });
   }
 
   return clauses;
 }
 
-function translateToPlainEnglish(clause: string, category: string): string {
+function determineClauseStatus(clause: string): "favorable" | "neutral" | "concern" {
+  const lc = clause.toLowerCase();
+
+  // Concerns
+  if (/without\s*notice|waive|penalty|forfeit|non[- ]?refundable|at\s*any\s*time|auto.*renew|mandatory\s*arbitration/i.test(lc)) {
+    return "concern";
+  }
+  if (/liable|harmless|waive|forfeit|surrender/i.test(lc)) {
+    return "concern";
+  }
+
+  // Favorable
+  if (/24\s*hours?\s*notice|48\s*hours?\s*notice|reasonable\s*notice/i.test(lc)) {
+    return "favorable";
+  }
+  if (/landlord\s*(?:is|shall be|will be)\s*responsible/i.test(lc)) {
+    return "favorable";
+  }
+  if (/refund|return.*deposit|pets?\s*(?:are\s*)?(?:allowed|permitted|welcome)/i.test(lc)) {
+    return "favorable";
+  }
+
+  return "neutral";
+}
+
+function translateToPlainEnglish(clause: string, _category: string): string {
   let plain = clause;
 
-  // Simplify common legal phrases
   plain = plain.replace(/\bshall\b/gi, "will");
   plain = plain.replace(/\bhereinafter\b/gi, "from now on");
   plain = plain.replace(/\bwherein\b/gi, "where");
@@ -303,6 +449,17 @@ function calculateRiskScore(flags: RedFlag[]): number {
     }
   }
   return Math.min(100, score);
+}
+
+function calculateLeaseScore(riskScore: number, keyTermCount: number, hasDeposit: boolean, hasRent: boolean): number {
+  // Start at 10 and deduct based on risk
+  let score = 10;
+  // Deduct based on risk score (0-100 mapped to 0-6 deduction)
+  score -= Math.round((riskScore / 100) * 6);
+  // Bonus for completeness (clear terms are good)
+  if (keyTermCount < 2) score -= 1;
+  if (!hasDeposit && !hasRent) score -= 1;
+  return Math.max(1, Math.min(10, score));
 }
 
 function generateSummary(
@@ -356,6 +513,8 @@ export function analyzeLease(leaseText: string): LeaseAnalysis {
   const terminationClause = extractTerminationClause(leaseText);
   const redFlags = detectRedFlags(leaseText, rent, deposit);
   const clauses = extractClauses(leaseText);
+  const importantDates = extractImportantDates(leaseText);
+  const tenantRights = extractTenantRights(leaseText);
   const riskScore = calculateRiskScore(redFlags);
   const summary = generateSummary(rent, deposit, duration, petPolicy, riskScore, redFlags.length);
 
@@ -367,6 +526,22 @@ export function analyzeLease(leaseText: string): LeaseAnalysis {
   if (petPolicy) keyTerms.push({ label: "Pet Policy", value: petPolicy, category: "rules" });
   if (terminationClause) keyTerms.push({ label: "Termination", value: terminationClause, category: "termination" });
 
+  // Check for utilities and parking
+  if (/utilit(?:y|ies)\s*(?:are\s*)?included/i.test(leaseText)) {
+    keyTerms.push({ label: "Utilities", value: "Included", category: "financial" });
+  } else if (/tenant\s*(?:is\s*)?responsible\s*(?:for\s*)?(?:all\s*)?utilit/i.test(leaseText)) {
+    keyTerms.push({ label: "Utilities", value: "Tenant responsibility", category: "financial" });
+  }
+  if (/parking\s*(?:is\s*)?included/i.test(leaseText)) {
+    keyTerms.push({ label: "Parking", value: "Included", category: "rules" });
+  } else if (/parking\s*(?:fee|cost|charge)\s*(?:of|:)?\s*\$\s?([\d,]+)/i.test(leaseText)) {
+    const pm = leaseText.match(/parking\s*(?:fee|cost|charge)\s*(?:of|:)?\s*\$\s?([\d,]+)/i);
+    if (pm) keyTerms.push({ label: "Parking", value: `$${pm[1]}/month`, category: "financial" });
+  }
+
+  const questionsForLandlord = generateQuestionsForLandlord(rent, deposit, petPolicy, redFlags, leaseText);
+  const leaseScore = calculateLeaseScore(riskScore, keyTerms.length, !!deposit, !!rent);
+
   const id = `analysis-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 
   return {
@@ -376,6 +551,9 @@ export function analyzeLease(leaseText: string): LeaseAnalysis {
     keyTerms,
     redFlags,
     clauses,
+    importantDates,
+    tenantRights,
+    questionsForLandlord,
     monthlyRent: rent,
     securityDeposit: deposit,
     leaseDuration: duration,
@@ -384,6 +562,7 @@ export function analyzeLease(leaseText: string): LeaseAnalysis {
     maintenanceResponsibilities: maintenance,
     terminationClause,
     riskScore,
+    leaseScore,
     createdAt: new Date().toISOString(),
   };
 }

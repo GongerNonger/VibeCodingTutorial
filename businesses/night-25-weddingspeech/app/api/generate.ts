@@ -20,6 +20,11 @@ const roleOpenings: Record<string, string[]> = {
     "Good evening! I'm {speaker}, and watching my {name1} walk down that aisle today was one of the most beautiful moments of my life.",
     "Thank you all for being here. I'm {speaker}, {name1}'s mom. From the moment {name1} told me about {name2}, I knew something special was happening.",
   ],
+  "mother of groom": [
+    "Hello, everyone. I'm {speaker}, {name1}'s mother, and I couldn't be prouder of the person {name1} has become — and the partner they've found in {name2}.",
+    "Good evening! I'm {speaker}, and as {name1}'s mom, I have to say — watching my child find true love is everything a mother could hope for.",
+    "Thank you all for being here. I'm {speaker}, {name1}'s mother. From the very first time {name1} mentioned {name2}, I could hear something different in their voice.",
+  ],
   "friend": [
     "Hi everyone! I'm {speaker}, and I've been lucky enough to call {name1} and {name2} my dear friends.",
     "Good evening! For those who don't know me, I'm {speaker}. I've had the pleasure of watching {name1} and {name2}'s love story unfold from the very beginning.",

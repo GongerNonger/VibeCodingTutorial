@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #0a0a0a;
+  --foreground: #e5e5e5;
+  --card: #171717;
+  --card-border: #262626;
+  --accent: #06b6d4;
+  --muted: #737373;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #404040 transparent;
+}
+
+::selection {
+  background-color: rgba(6, 182, 212, 0.3);
+}

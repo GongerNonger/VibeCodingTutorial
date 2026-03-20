@@ -1,189 +1,219 @@
-import { generateJobPosting, detectBias, calculateInclusivityScore, analyzeJobPosting } from "./app/api/generate";
-import { JobInput, JobPosting, BiasWarning } from "./app/api/store";
+import { generateJobDescription, GenerateInput } from "./lib/generator";
+import { detectBias } from "./lib/bias-detector";
+import { templates } from "./lib/templates";
 
 let passed = 0;
 let failed = 0;
 
 function assert(condition: boolean, message: string) {
   if (condition) {
-    console.log(`  PASS: ${message}`);
     passed++;
+    console.log(`  PASS: ${message}`);
   } else {
-    console.error(`  FAIL: ${message}`);
     failed++;
+    console.log(`  FAIL: ${message}`);
   }
 }
 
-function makeInput(overrides: Partial<JobInput> = {}): JobInput {
-  return {
+function assertEqual(actual: any, expected: any, message: string) {
+  const condition = actual === expected;
+  if (!condition) {
+    console.log(`    Expected: ${JSON.stringify(expected)}`);
+    console.log(`    Actual:   ${JSON.stringify(actual)}`);
+  }
+  assert(condition, message);
+}
+
+// --- Test Data ---
+const baseInput: GenerateInput = {
+  role: {
     title: "Software Engineer",
-    company: "TestCo",
-    location: "Remote",
-    workMode: "remote",
-    employmentType: "full-time",
-    experienceLevel: "mid",
-    salaryRange: "$100,000 - $150,000",
     department: "Engineering",
-    notes: "",
-    ...overrides,
-  };
-}
-
-console.log("\n=== HireWrite Test Suite ===\n");
-
-// Test 1: Job generation produces valid output
-console.log("Test 1: Job generation produces valid structured output");
-{
-  const posting = generateJobPosting(makeInput());
-  assert(typeof posting.id === "string" && posting.id.length > 0, "Has a valid ID");
-  assert(posting.title === "Software Engineer", "Title matches input");
-  assert(posting.company === "TestCo", "Company matches input");
-  assert(posting.description.length > 0, "Description is non-empty");
-  assert(posting.responsibilities.length >= 3, "Has at least 3 responsibilities");
-  assert(posting.qualifications.length >= 3, "Has at least 3 qualifications");
-  assert(posting.niceToHaves.length >= 1, "Has at least 1 nice-to-have");
-  assert(posting.benefits.length >= 3, "Has at least 3 benefits");
-  assert(typeof posting.inclusivityScore === "number", "Has inclusivity score");
-  assert(Array.isArray(posting.biasWarnings), "Has bias warnings array");
-}
-
-// Test 2: Bias detection - gendered language
-console.log("\nTest 2: Bias detection flags gendered language");
-{
-  const warnings = detectBias(
-    "We are looking for a rockstar ninja to join our team. Must have manpower management skills.",
-    "Developer",
-    "mid"
-  );
-  const terms = warnings.map((w) => w.text.toLowerCase());
-  assert(
-    terms.some((t) => t.includes("rockstar")),
-    "Detects 'rockstar' as biased"
-  );
-  assert(
-    terms.some((t) => t.includes("ninja")),
-    "Detects 'ninja' as biased"
-  );
-  assert(
-    terms.some((t) => t.includes("manpower")),
-    "Detects 'manpower' as biased"
-  );
-  assert(
-    warnings.every((w) => w.suggestion.length > 0),
-    "All warnings have suggestions"
-  );
-}
-
-// Test 3: Inclusivity scoring
-console.log("\nTest 3: Inclusivity scoring works correctly");
-{
-  // Clean posting - should score high
-  const cleanWarnings: BiasWarning[] = [];
-  const cleanScore = calculateInclusivityScore(cleanWarnings, {
-    salaryRange: "$100k",
-    benefits: ["a", "b", "c"],
+    level: "senior",
+    location: "San Francisco, CA",
     workMode: "remote",
-  });
-  assert(cleanScore > 75, `Clean posting scores high (${cleanScore})`);
+  },
+  requirements: {
+    mustHaveSkills: ["React", "TypeScript"],
+    niceToHaveSkills: ["GraphQL", "AWS"],
+    experience: "5",
+    education: "BS in Computer Science or equivalent experience",
+  },
+  company: {
+    name: "TechCorp",
+    mission: "make developer tools accessible to everyone",
+    benefits: ["Health insurance", "401k", "Remote work"],
+    culture: "We value collaboration and continuous learning.",
+  },
+  tone: "startup-casual",
+  templateId: "tech-startup",
+};
 
-  // Biased posting - should score lower
-  const biasedWarnings: BiasWarning[] = [
-    { text: "a", severity: "high", suggestion: "b", category: "c" },
-    { text: "d", severity: "high", suggestion: "e", category: "f" },
-    { text: "g", severity: "medium", suggestion: "h", category: "i" },
-  ];
-  const biasedScore = calculateInclusivityScore(biasedWarnings, {});
-  assert(biasedScore < cleanScore, `Biased posting scores lower (${biasedScore} < ${cleanScore})`);
-  assert(biasedScore < 75, `Heavily biased posting scores below 75 (${biasedScore})`);
+// =====================
+// JD Generation Tests
+// =====================
+console.log("\n=== JD Generation Tests ===");
+
+const result = generateJobDescription(baseInput);
+
+assert(result.fullText.length > 0, "Generated JD has non-empty full text");
+assert(result.fullText.includes("Software Engineer"), "Full text includes job title");
+assert(result.aboutUs.includes("TechCorp"), "About Us includes company name");
+assert(result.roleOverview.includes("senior"), "Role overview includes level descriptor");
+assert(result.roleOverview.includes("remote"), "Role overview mentions work mode");
+assert(result.responsibilities.length > 0, "Has responsibilities listed");
+assert(result.mustHaveRequirements.length > 0, "Has must-have requirements");
+assert(result.niceToHaveRequirements.length > 0, "Has nice-to-have requirements");
+assert(result.benefits.length > 0, "Has benefits listed");
+assert(result.howToApply.length > 0, "Has how-to-apply section");
+
+// Check must-have skills appear
+assert(
+  result.mustHaveRequirements.some((r) => r.includes("React")),
+  "Must-have requirements include React"
+);
+assert(
+  result.niceToHaveRequirements.some((r) => r.includes("GraphQL")),
+  "Nice-to-have requirements include GraphQL"
+);
+
+// Check education appears in requirements
+assert(
+  result.mustHaveRequirements.some((r) => r.includes("Computer Science")),
+  "Education requirement is included"
+);
+
+// =====================
+// Tone Variation Tests
+// =====================
+console.log("\n=== Tone Variation Tests ===");
+
+const casualResult = generateJobDescription({ ...baseInput, tone: "startup-casual" });
+assert(casualResult.roleOverview.includes("Hey there!"), "Casual tone uses friendly greeting");
+assert(casualResult.howToApply.includes("Excited"), "Casual tone how-to-apply is informal");
+
+const formalResult = generateJobDescription({ ...baseInput, tone: "corporate-formal" });
+assert(formalResult.roleOverview.includes("pleased to announce"), "Formal tone uses professional language");
+assert(formalResult.howToApply.includes("equal opportunity"), "Formal tone includes EEO language");
+
+const creativeResult = generateJobDescription({ ...baseInput, tone: "creative" });
+assert(creativeResult.roleOverview.includes("Ready to make an impact"), "Creative tone uses bold opening");
+
+// =====================
+// Template Variation Tests
+// =====================
+console.log("\n=== Template Variation Tests ===");
+
+const healthcareResult = generateJobDescription({ ...baseInput, templateId: "healthcare" });
+assert(
+  healthcareResult.aboutUs.includes("healthcare"),
+  "Healthcare template references healthcare in About Us"
+);
+
+const financeResult = generateJobDescription({ ...baseInput, templateId: "finance" });
+assert(
+  financeResult.aboutUs.includes("financial"),
+  "Finance template references finance in About Us"
+);
+
+// =====================
+// Work Mode Tests
+// =====================
+console.log("\n=== Work Mode Tests ===");
+
+const hybridResult = generateJobDescription({
+  ...baseInput,
+  role: { ...baseInput.role, workMode: "hybrid" },
+});
+assert(hybridResult.roleOverview.includes("hybrid"), "Hybrid mode mentioned in overview");
+
+const onsiteResult = generateJobDescription({
+  ...baseInput,
+  role: { ...baseInput.role, workMode: "onsite" },
+});
+assert(onsiteResult.roleOverview.includes("onsite"), "Onsite mode mentioned in overview");
+
+// =====================
+// Bias Detection Tests
+// =====================
+console.log("\n=== Bias Detection Tests ===");
+
+const biasResults1 = detectBias("We need a coding ninja who is aggressive and a rockstar developer");
+assert(biasResults1.length >= 3, "Detects multiple biased terms (ninja, aggressive, rockstar)");
+assert(
+  biasResults1.some((m) => m.term.toLowerCase() === "ninja"),
+  "Detects 'ninja' as biased"
+);
+assert(
+  biasResults1.some((m) => m.term.toLowerCase() === "rockstar"),
+  "Detects 'rockstar' as biased"
+);
+assert(
+  biasResults1.some((m) => m.category === "Gender-coded"),
+  "Categorizes gender-coded language"
+);
+
+const biasResults2 = detectBias("Looking for a young digital native");
+assert(biasResults2.length >= 2, "Detects age-biased terms");
+assert(
+  biasResults2.some((m) => m.category === "Age bias"),
+  "Categorizes age bias correctly"
+);
+
+const biasResults3 = detectBias("Must be a native speaker and culture fit");
+assert(biasResults3.length >= 2, "Detects exclusionary terms");
+assert(
+  biasResults3.some((m) => m.term.toLowerCase() === "culture fit"),
+  "Detects 'culture fit' as exclusionary"
+);
+
+const cleanResult = detectBias("We are looking for a talented engineer to join our team.");
+assert(cleanResult.length === 0, "Clean text has no bias matches");
+
+// Suggestions exist
+assert(
+  biasResults1.every((m) => m.suggestion.length > 0),
+  "All bias matches have suggestions"
+);
+assert(
+  biasResults1.every((m) => m.explanation.length > 0),
+  "All bias matches have explanations"
+);
+
+// =====================
+// Templates Tests
+// =====================
+console.log("\n=== Templates Tests ===");
+
+assert(templates.length >= 5, "At least 5 industry templates available");
+assert(
+  templates.every((t) => t.id && t.industry && t.name),
+  "All templates have id, industry, and name"
+);
+assert(
+  templates.every((t) => t.responsibilitiesTemplate.length > 0),
+  "All templates have responsibilities"
+);
+
+// =====================
+// Edge Case Tests
+// =====================
+console.log("\n=== Edge Case Tests ===");
+
+const emptyBenefitsInput: GenerateInput = {
+  ...baseInput,
+  company: { ...baseInput.company, benefits: [] },
+};
+const emptyBenefitsResult = generateJobDescription(emptyBenefitsInput);
+assert(emptyBenefitsResult.benefits.length > 0, "Falls back to template benefits when none provided");
+
+// =====================
+// Summary
+// =====================
+console.log(`\n${"=".repeat(40)}`);
+console.log(`Results: ${passed} passed, ${failed} failed, ${passed + failed} total`);
+console.log(`${"=".repeat(40)}\n`);
+
+if (failed > 0) {
+  process.exit(1);
 }
-
-// Test 4: Different experience levels produce appropriate qualifications
-console.log("\nTest 4: Experience levels produce appropriate qualifications");
-{
-  const entryPosting = generateJobPosting(makeInput({ experienceLevel: "entry" }));
-  const seniorPosting = generateJobPosting(makeInput({ experienceLevel: "senior" }));
-  const leadPosting = generateJobPosting(makeInput({ experienceLevel: "lead" }));
-
-  const entryQuals = entryPosting.qualifications.join(" ").toLowerCase();
-  const seniorQuals = seniorPosting.qualifications.join(" ").toLowerCase();
-  const leadQuals = leadPosting.qualifications.join(" ").toLowerCase();
-
-  assert(
-    entryQuals.includes("learn") || entryQuals.includes("willingness"),
-    "Entry level mentions learning/willingness"
-  );
-  assert(
-    seniorQuals.includes("7+") || seniorQuals.includes("leadership"),
-    "Senior level mentions 7+ years or leadership"
-  );
-  assert(
-    leadQuals.includes("10+") || leadQuals.includes("team"),
-    "Lead level mentions 10+ years or team management"
-  );
-}
-
-// Test 5: Required fields validation (tested via input validation logic)
-console.log("\nTest 5: Required fields are present in generated output");
-{
-  const posting = generateJobPosting(makeInput());
-  assert(posting.title.length > 0, "Title is required and present");
-  assert(posting.company.length > 0, "Company is required and present");
-  assert(posting.location.length > 0, "Location is required and present");
-  assert(posting.department.length > 0, "Department is required and present");
-  assert(
-    ["remote", "hybrid", "onsite"].includes(posting.workMode),
-    "Work mode is valid"
-  );
-  assert(
-    ["full-time", "part-time", "contract"].includes(posting.employmentType),
-    "Employment type is valid"
-  );
-  assert(
-    ["entry", "mid", "senior", "lead"].includes(posting.experienceLevel),
-    "Experience level is valid"
-  );
-}
-
-// Test 6: Excessive requirements detection
-console.log("\nTest 6: Excessive requirements detection for entry-level roles");
-{
-  const warnings = detectBias(
-    "Must have 10+ years of experience in React development",
-    "Junior Developer",
-    "entry"
-  );
-  assert(
-    warnings.some((w) => w.category === "excessive-requirements"),
-    "Flags excessive years for entry-level"
-  );
-  assert(
-    warnings.some((w) => w.severity === "high"),
-    "Excessive entry-level requirements are high severity"
-  );
-
-  // Mid-level with reasonable requirements should not flag
-  const midWarnings = detectBias(
-    "Must have 4 years of experience",
-    "Developer",
-    "mid"
-  );
-  assert(
-    !midWarnings.some((w) => w.category === "excessive-requirements"),
-    "Does not flag reasonable mid-level requirements"
-  );
-}
-
-// Test 7: Analyze existing posting
-console.log("\nTest 7: Analyze existing posting works");
-{
-  const posting = generateJobPosting(
-    makeInput({ notes: "Looking for a rockstar ninja" })
-  );
-  const analysis = analyzeJobPosting(posting);
-  assert(typeof analysis.inclusivityScore === "number", "Analysis returns inclusivity score");
-  assert(Array.isArray(analysis.biasWarnings), "Analysis returns bias warnings");
-  assert(analysis.biasWarnings.length > 0, "Analysis detects bias from notes");
-}
-
-console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
-if (failed > 0) process.exit(1);

@@ -1,109 +1,115 @@
-import { generateDeck } from "./app/api/generate";
-import { getAllDecks, getDeckById, addDeck } from "./app/api/store";
+import { generateDeck, StartupInput, DeckStyle, SLIDE_NAMES } from './lib/generator';
 
 let passed = 0;
 let failed = 0;
 
 function assert(condition: boolean, message: string) {
   if (condition) {
-    console.log(`  PASS: ${message}`);
     passed++;
+    console.log(`  ✓ ${message}`);
   } else {
-    console.error(`  FAIL: ${message}`);
     failed++;
+    console.error(`  ✗ FAIL: ${message}`);
   }
 }
 
-const sampleInput = {
-  companyName: "TestCo",
-  industry: "SaaS",
-  problem: "Teams waste hours on manual data entry",
-  solution: "AI-powered automation that eliminates repetitive work",
-  targetMarket: "Mid-market B2B companies",
-  businessModel: "SaaS subscription at $99/mo per seat",
-  fundingAsk: "$1.5M",
-  teamSize: 4,
-  stage: "seed",
+const sampleInput: StartupInput = {
+  name: 'TestStartup',
+  industry: 'FinTech',
+  problem: 'Small businesses struggle with invoicing. Manual processes waste hours every week.',
+  solution: 'Automated invoicing platform that sends and tracks invoices in seconds.',
+  targetMarket: 'Small and medium businesses',
+  businessModel: 'SaaS subscription at $29/mo',
+  traction: '500 paying customers, $15K MRR, 20% MoM growth',
+  team: 'Jane (ex-Stripe), John (ex-Square)',
+  fundingAsk: '$2M seed round',
 };
 
-console.log("\nPitchDeck Tests\n" + "=".repeat(40));
+console.log('\n=== PitchDeck Generator Tests ===\n');
 
-// Test 1: Deck generation returns valid structure
-console.log("\n1. Deck generation returns valid structure");
-const deck1 = generateDeck(sampleInput);
-assert(!!deck1.id, "Deck has an id");
-assert(deck1.companyName === "TestCo", "Company name matches input");
-assert(deck1.industry === "SaaS", "Industry matches input");
-assert(Array.isArray(deck1.slides), "Slides is an array");
-assert(!!deck1.createdAt, "Deck has createdAt timestamp");
+// --- Test 1: Basic deck generation ---
+console.log('Test Group 1: Basic Deck Generation');
+const deck = generateDeck(sampleInput, 'yc-style');
 
-// Test 2: Correct slide count (10-12 slides)
-console.log("\n2. Slide count is between 10 and 12");
-assert(deck1.slides.length >= 10, "At least 10 slides");
-assert(deck1.slides.length <= 12, "At most 12 slides");
-assert(deck1.slides.length === 11, "Default generation produces 11 slides");
+assert(deck.id.startsWith('deck_'), 'Deck ID has correct prefix');
+assert(deck.startupName === 'TestStartup', 'Startup name is set correctly');
+assert(deck.style === 'yc-style', 'Deck style is set correctly');
+assert(deck.slides.length === 10, 'Deck has exactly 10 slides');
+assert(typeof deck.createdAt === 'string' && deck.createdAt.length > 0, 'Created timestamp exists');
 
-// Test 3: Market sizing is present and realistic
-console.log("\n3. Market sizing is present and realistic");
-const marketSlide = deck1.slides.find((s) => s.title === "Market Size");
-assert(!!marketSlide, "Market Size slide exists");
-assert(marketSlide!.content.includes("TAM"), "Market slide includes TAM");
-assert(marketSlide!.content.includes("SAM"), "Market slide includes SAM");
-assert(marketSlide!.content.includes("SOM"), "Market slide includes SOM");
-
-// Test 4: Each slide has talking points
-console.log("\n4. Each slide has talking points");
-const allHaveTalkingPoints = deck1.slides.every(
-  (s) => Array.isArray(s.talkingPoints) && s.talkingPoints.length >= 2
-);
-assert(allHaveTalkingPoints, "All slides have at least 2 talking points");
-const slide1Points = deck1.slides[0].talkingPoints.length;
-assert(slide1Points >= 3, "Title slide has at least 3 talking points");
-
-// Test 5: Different industries produce different market data
-console.log("\n5. Different industries produce different market data");
-const fintechDeck = generateDeck({ ...sampleInput, industry: "FinTech" });
-const healthDeck = generateDeck({ ...sampleInput, industry: "HealthTech" });
-const fintechMarket = fintechDeck.slides.find((s) => s.title === "Market Size")!.content;
-const healthMarket = healthDeck.slides.find((s) => s.title === "Market Size")!.content;
-assert(fintechMarket !== healthMarket, "FinTech and HealthTech market data differs");
-assert(fintechMarket.includes("fintech"), "FinTech deck mentions fintech market");
-assert(healthMarket.includes("health"), "HealthTech deck mentions health market");
-
-// Test 6: Required slides are present
-console.log("\n6. Required slides are present");
-const requiredTitles = [
-  "The Problem",
-  "Our Solution",
-  "Market Size",
-  "Business Model",
-  "Traction & Milestones",
-  "Competitive Landscape",
-  "Team",
-  "Financial Projections",
-  "The Ask",
-  "Appendix",
-];
-for (const title of requiredTitles) {
-  const found = deck1.slides.some((s) => s.title === title);
-  assert(found, `Required slide "${title}" is present`);
+// --- Test 2: Slide structure ---
+console.log('\nTest Group 2: Slide Structure');
+for (const slide of deck.slides) {
+  assert(slide.bullets.length >= 2, `Slide "${slide.title}" has at least 2 bullets`);
 }
+assert(deck.slides[0].talkingPoints.length >= 2, 'Title slide has talking points');
+assert(deck.slides[0].suggestedVisuals.length >= 2, 'Title slide has suggested visuals');
 
-// Test 7: Store operations
-console.log("\n7. Store operations work correctly");
-const initialCount = getAllDecks().length;
-assert(initialCount >= 1, "Store has pre-seeded sample deck");
-addDeck(deck1);
-const afterCount = getAllDecks().length;
-assert(afterCount === initialCount + 1, "Deck was added to store");
-const fetched = getDeckById(deck1.id);
-assert(fetched?.companyName === "TestCo", "getDeckById returns correct deck");
-const notFound = getDeckById("nonexistent-id");
-assert(notFound === undefined, "getDeckById returns undefined for missing id");
+// --- Test 3: Slide titles match expected ---
+console.log('\nTest Group 3: Slide Titles');
+const expectedTitles = ['TestStartup', 'The Problem', 'Our Solution', 'Market Size', 'Business Model', 'Traction', 'Competition', 'Team', 'Financials', 'The Ask'];
+assert(deck.slides[0].title === expectedTitles[0], 'Title slide uses startup name');
+assert(deck.slides[1].title === expectedTitles[1], 'Problem slide title is correct');
+assert(deck.slides[2].title === expectedTitles[2], 'Solution slide title is correct');
+assert(deck.slides[9].title === expectedTitles[9], 'Ask slide title is correct');
 
-// Summary
-console.log("\n" + "=".repeat(40));
-console.log(`Results: ${passed} passed, ${failed} failed out of ${passed + failed} total`);
+// --- Test 4: Content contains startup details ---
+console.log('\nTest Group 4: Content Personalization');
+const allText = deck.slides.map(s => [...s.bullets, ...s.talkingPoints].join(' ')).join(' ');
+assert(allText.includes('TestStartup'), 'Deck content includes startup name');
+assert(allText.includes('FinTech') || allText.includes('fintech'), 'Deck content references industry');
+assert(allText.includes('Small and medium businesses') || allText.includes('small and medium'), 'Deck content references target market');
+
+// --- Test 5: Style variations ---
+console.log('\nTest Group 5: Style Variations');
+const classicDeck = generateDeck(sampleInput, 'classic');
+const storyDeck = generateDeck(sampleInput, 'storytelling');
+
+assert(classicDeck.style === 'classic', 'Classic deck has correct style');
+assert(storyDeck.style === 'storytelling', 'Storytelling deck has correct style');
+
+// YC-style title vs storytelling title should differ
+assert(
+  deck.slides[1].bullets[0] !== storyDeck.slides[1].bullets[0],
+  'YC and storytelling problem slides have different content'
+);
+assert(
+  classicDeck.slides[2].bullets[0] !== storyDeck.slides[2].bullets[0],
+  'Classic and storytelling solution slides differ'
+);
+
+// --- Test 6: Unique IDs ---
+console.log('\nTest Group 6: Unique IDs');
+const deck2 = generateDeck(sampleInput, 'yc-style');
+assert(deck.id !== deck2.id, 'Each generated deck has a unique ID');
+
+// --- Test 7: SLIDE_NAMES constant ---
+console.log('\nTest Group 7: Constants');
+assert(SLIDE_NAMES.length === 10, 'SLIDE_NAMES has 10 entries');
+assert(SLIDE_NAMES[0] === 'Title', 'First slide name is Title');
+assert(SLIDE_NAMES[9] === 'The Ask', 'Last slide name is The Ask');
+
+// --- Test 8: Edge cases ---
+console.log('\nTest Group 8: Edge Cases');
+const minimalInput: StartupInput = {
+  name: 'MinimalCo',
+  industry: 'Tech',
+  problem: 'A problem',
+  solution: 'A solution',
+  targetMarket: '',
+  businessModel: '',
+  traction: '',
+  team: '',
+  fundingAsk: '',
+};
+const minDeck = generateDeck(minimalInput, 'yc-style');
+assert(minDeck.slides.length === 10, 'Minimal input still generates 10 slides');
+assert(minDeck.slides[0].title === 'MinimalCo', 'Minimal deck uses correct name');
+assert(minDeck.slides[0].bullets.length >= 1, 'Minimal deck title slide has bullets');
+
+// --- Summary ---
+console.log(`\n=== Results: ${passed} passed, ${failed} failed out of ${passed + failed} assertions ===\n`);
+
 if (failed > 0) {
   process.exit(1);
 }

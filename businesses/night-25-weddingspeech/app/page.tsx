@@ -24,6 +24,7 @@ const ROLES = [
   "maid of honor",
   "father of bride",
   "mother of bride",
+  "mother of groom",
   "friend",
   "sibling",
   "other",
@@ -90,7 +91,7 @@ export default function Home() {
     }
     setLoading(true);
     try {
-      const res = await fetch("/api/speeches", {
+      const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

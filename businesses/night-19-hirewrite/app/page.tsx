@@ -1,671 +1,636 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
-interface BiasWarning {
-  text: string;
-  severity: "low" | "medium" | "high";
-  suggestion: string;
+type Step = "role" | "requirements" | "company" | "tone" | "result";
+type Tone = "startup-casual" | "corporate-formal" | "creative";
+type WorkMode = "remote" | "hybrid" | "onsite";
+
+interface BiasMatch {
+  term: string;
+  index: number;
   category: string;
+  suggestion: string;
+  explanation: string;
 }
 
-interface JobPosting {
-  id: string;
-  title: string;
-  company: string;
-  location: string;
-  workMode: string;
-  employmentType: string;
-  experienceLevel: string;
-  salaryRange: string;
-  department: string;
-  description: string;
+interface BiasResult {
+  matches: BiasMatch[];
+  score: number;
+  totalIssues: number;
+}
+
+interface GeneratedJD {
+  aboutUs: string;
+  roleOverview: string;
   responsibilities: string[];
-  qualifications: string[];
-  niceToHaves: string[];
+  mustHaveRequirements: string[];
+  niceToHaveRequirements: string[];
   benefits: string[];
-  biasWarnings: BiasWarning[];
-  inclusivityScore: number;
-  createdAt: string;
+  howToApply: string;
+  fullText: string;
 }
 
-const WORK_MODES = ["remote", "hybrid", "onsite"] as const;
-const EMPLOYMENT_TYPES = ["full-time", "part-time", "contract"] as const;
-const EXPERIENCE_LEVELS = ["entry", "mid", "senior", "lead"] as const;
-
-export default function HomePage() {
-  const [form, setForm] = useState({
-    title: "",
-    company: "",
-    location: "",
-    workMode: "remote" as string,
-    employmentType: "full-time" as string,
-    experienceLevel: "mid" as string,
-    salaryRange: "",
-    department: "",
-    notes: "",
-  });
-
-  const [currentPosting, setCurrentPosting] = useState<JobPosting | null>(null);
-  const [history, setHistory] = useState<JobPosting[]>([]);
+export default function Home() {
+  const [step, setStep] = useState<Step>("role");
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [error, setError] = useState("");
 
-  useEffect(() => {
-    fetch("/api/jobs")
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) setHistory(data);
-      })
-      .catch(() => {});
-  }, []);
+  // Role details
+  const [title, setTitle] = useState("");
+  const [department, setDepartment] = useState("");
+  const [level, setLevel] = useState("mid");
+  const [location, setLocation] = useState("");
+  const [workMode, setWorkMode] = useState<WorkMode>("remote");
 
-  const handleChange = (
-    e: React.ChangeEvent<
-      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
-    >
-  ) => {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+  // Requirements
+  const [mustHaveSkills, setMustHaveSkills] = useState("");
+  const [niceToHaveSkills, setNiceToHaveSkills] = useState("");
+  const [experience, setExperience] = useState("3");
+  const [education, setEducation] = useState("");
+
+  // Company
+  const [companyName, setCompanyName] = useState("");
+  const [mission, setMission] = useState("");
+  const [benefits, setBenefits] = useState("");
+  const [culture, setCulture] = useState("");
+
+  // Tone & template
+  const [tone, setTone] = useState<Tone>("startup-casual");
+  const [templateId, setTemplateId] = useState("tech-startup");
+
+  // Results
+  const [generatedJD, setGeneratedJD] = useState<GeneratedJD | null>(null);
+  const [biasResult, setBiasResult] = useState<BiasResult | null>(null);
+
+  const steps: Step[] = ["role", "requirements", "company", "tone", "result"];
+  const stepLabels: Record<Step, string> = {
+    role: "Role Details",
+    requirements: "Requirements",
+    company: "Company Info",
+    tone: "Tone & Style",
+    result: "Generated JD",
   };
 
-  const handleGenerate = async () => {
-    setError("");
-    if (!form.title || !form.company || !form.location || !form.department) {
-      setError("Please fill in all required fields.");
-      return;
-    }
+  async function handleGenerate() {
     setLoading(true);
     try {
-      const res = await fetch("/api/jobs", {
+      const payload = {
+        role: { title, department, level, location, workMode },
+        requirements: {
+          mustHaveSkills: mustHaveSkills.split(",").map((s) => s.trim()).filter(Boolean),
+          niceToHaveSkills: niceToHaveSkills.split(",").map((s) => s.trim()).filter(Boolean),
+          experience,
+          education,
+        },
+        company: {
+          name: companyName,
+          mission,
+          benefits: benefits.split(",").map((s) => s.trim()).filter(Boolean),
+          culture,
+        },
+        tone,
+        templateId,
+      };
+
+      const genRes = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "Failed to generate posting");
-        return;
-      }
-      setCurrentPosting(data);
-      setHistory((prev) => [data, ...prev]);
-    } catch {
-      setError("Network error. Please try again.");
+      const jd: GeneratedJD = await genRes.json();
+      setGeneratedJD(jd);
+
+      // Run bias check on the full text
+      const biasRes = await fetch("/api/bias-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: jd.fullText }),
+      });
+      const bias: BiasResult = await biasRes.json();
+      setBiasResult(bias);
+
+      setStep("result");
+    } catch (e) {
+      console.error("Generation failed:", e);
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  const handleCopy = () => {
-    if (!currentPosting) return;
-    const text = formatPostingAsText(currentPosting);
-    navigator.clipboard.writeText(text).then(() => {
+  function handleCopy() {
+    if (generatedJD) {
+      navigator.clipboard.writeText(generatedJD.fullText);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    });
-  };
+    }
+  }
 
-  const handleSelectHistory = async (id: string) => {
-    try {
-      const res = await fetch(`/api/jobs/${id}`);
-      const data = await res.json();
-      if (res.ok) setCurrentPosting(data);
-    } catch {}
-  };
+  function handleExport() {
+    if (generatedJD) {
+      const blob = new Blob([generatedJD.fullText], { type: "text/markdown" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${title.replace(/\s+/g, "-").toLowerCase()}-job-description.md`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  }
 
-  const scoreColor = (score: number) =>
-    score >= 75
-      ? "text-green-400"
-      : score >= 50
-      ? "text-yellow-400"
-      : "text-red-400";
-
-  const scoreBg = (score: number) =>
-    score >= 75
-      ? "bg-green-500"
-      : score >= 50
-      ? "bg-yellow-500"
-      : "bg-red-500";
-
-  const severityColor = (s: string) =>
-    s === "high"
-      ? "text-red-400 bg-red-950 border-red-800"
-      : s === "medium"
-      ? "text-yellow-400 bg-yellow-950 border-yellow-800"
-      : "text-blue-400 bg-blue-950 border-blue-800";
+  const currentStepIndex = steps.indexOf(step);
 
   return (
-    <div className="min-h-screen">
+    <main className="min-h-screen bg-gray-950">
       {/* Header */}
-      <header className="border-b border-gray-800 bg-gray-950/80 backdrop-blur sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-sky-500 flex items-center justify-center font-bold text-white text-lg">
-              H
-            </div>
+      <header className="border-b border-gray-800 bg-gray-900/50 backdrop-blur-sm">
+        <div className="mx-auto max-w-6xl px-4 py-6">
+          <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl font-bold text-white">HireWrite</h1>
-              <p className="text-xs text-gray-400">
-                Inclusive Job Description Generator
+              <h1 className="text-3xl font-bold text-white">
+                <span className="text-violet-500">Hire</span>Write
+              </h1>
+              <p className="mt-1 text-gray-400">
+                Generate inclusive, optimized job postings with bias detection
               </p>
             </div>
-          </div>
-          <div className="flex items-center gap-3 text-sm text-gray-400">
-            <span className="hidden sm:inline">$5/post or $29/mo unlimited</span>
-            <button className="bg-sky-500 hover:bg-sky-400 text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm">
-              Get Started
-            </button>
+            <div className="text-right text-sm text-gray-500">
+              <div>$5 per post</div>
+              <div className="text-violet-400">$29/mo unlimited</div>
+            </div>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left column: Form */}
-          <div className="lg:col-span-1 space-y-6">
-            <div className="bg-gray-900 rounded-xl border border-gray-800 p-6">
-              <h2 className="text-lg font-semibold text-white mb-4">
-                Role Details
-              </h2>
+      <div className="mx-auto max-w-6xl px-4 py-8">
+        {/* Step Indicator */}
+        {step !== "result" && (
+          <div className="mb-8 flex items-center justify-center gap-2">
+            {steps.filter((s) => s !== "result").map((s, i) => (
+              <div key={s} className="flex items-center">
+                <button
+                  onClick={() => setStep(s)}
+                  className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-medium transition-colors ${
+                    s === step
+                      ? "bg-violet-500 text-white"
+                      : i < currentStepIndex
+                        ? "bg-violet-500/20 text-violet-400"
+                        : "bg-gray-800 text-gray-500"
+                  }`}
+                >
+                  {i + 1}
+                </button>
+                <span
+                  className={`ml-2 text-sm ${s === step ? "text-white" : "text-gray-500"}`}
+                >
+                  {stepLabels[s]}
+                </span>
+                {i < 3 && (
+                  <div className="mx-4 h-px w-8 bg-gray-800" />
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
-              {error && (
-                <div className="mb-4 p-3 rounded-lg bg-red-950 border border-red-800 text-red-300 text-sm">
-                  {error}
-                </div>
-              )}
-
-              <div className="space-y-4">
-                <Field
-                  label="Job Title *"
-                  name="title"
-                  value={form.title}
-                  onChange={handleChange}
-                  placeholder="e.g. Software Engineer"
+        {/* Step: Role Details */}
+        {step === "role" && (
+          <div className="mx-auto max-w-2xl rounded-xl border border-gray-800 bg-gray-900 p-8">
+            <h2 className="mb-6 text-xl font-semibold text-white">Role Details</h2>
+            <div className="space-y-5">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                  Job Title *
+                </label>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="e.g. Senior Software Engineer"
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
                 />
-                <Field
-                  label="Company *"
-                  name="company"
-                  value={form.company}
-                  onChange={handleChange}
-                  placeholder="e.g. Acme Inc"
-                />
-                <Field
-                  label="Location *"
-                  name="location"
-                  value={form.location}
-                  onChange={handleChange}
-                  placeholder="e.g. San Francisco, CA"
-                />
-
-                <SelectField
-                  label="Work Mode"
-                  name="workMode"
-                  value={form.workMode}
-                  onChange={handleChange}
-                  options={WORK_MODES}
-                />
-                <SelectField
-                  label="Employment Type"
-                  name="employmentType"
-                  value={form.employmentType}
-                  onChange={handleChange}
-                  options={EMPLOYMENT_TYPES}
-                />
-                <SelectField
-                  label="Experience Level"
-                  name="experienceLevel"
-                  value={form.experienceLevel}
-                  onChange={handleChange}
-                  options={EXPERIENCE_LEVELS}
-                />
-
-                <Field
-                  label="Salary Range"
-                  name="salaryRange"
-                  value={form.salaryRange}
-                  onChange={handleChange}
-                  placeholder="e.g. $100,000 - $150,000"
-                />
-                <Field
-                  label="Department *"
-                  name="department"
-                  value={form.department}
-                  onChange={handleChange}
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                  Department *
+                </label>
+                <input
+                  type="text"
+                  value={department}
+                  onChange={(e) => setDepartment(e.target.value)}
                   placeholder="e.g. Engineering"
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
                 />
-
+              </div>
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">
-                    Additional Notes
+                  <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                    Level
                   </label>
-                  <textarea
-                    name="notes"
-                    value={form.notes}
-                    onChange={handleChange}
-                    rows={3}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent resize-none"
-                    placeholder="Any specific requirements or context..."
+                  <select
+                    value={level}
+                    onChange={(e) => setLevel(e.target.value)}
+                    className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-white focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                  >
+                    <option value="junior">Junior</option>
+                    <option value="mid">Mid-Level</option>
+                    <option value="senior">Senior</option>
+                    <option value="lead">Lead</option>
+                    <option value="executive">Executive</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                    Work Mode
+                  </label>
+                  <select
+                    value={workMode}
+                    onChange={(e) => setWorkMode(e.target.value as WorkMode)}
+                    className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-white focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                  >
+                    <option value="remote">Remote</option>
+                    <option value="hybrid">Hybrid</option>
+                    <option value="onsite">Onsite</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                  Location
+                </label>
+                <input
+                  type="text"
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  placeholder="e.g. San Francisco, CA"
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                />
+              </div>
+            </div>
+            <div className="mt-8 flex justify-end">
+              <button
+                onClick={() => setStep("requirements")}
+                disabled={!title || !department}
+                className="rounded-lg bg-violet-500 px-6 py-2.5 font-medium text-white transition-colors hover:bg-violet-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next Step
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step: Requirements */}
+        {step === "requirements" && (
+          <div className="mx-auto max-w-2xl rounded-xl border border-gray-800 bg-gray-900 p-8">
+            <h2 className="mb-6 text-xl font-semibold text-white">Requirements</h2>
+            <div className="space-y-5">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                  Must-Have Skills (comma separated)
+                </label>
+                <input
+                  type="text"
+                  value={mustHaveSkills}
+                  onChange={(e) => setMustHaveSkills(e.target.value)}
+                  placeholder="e.g. React, TypeScript, Node.js"
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                  Nice-to-Have Skills (comma separated)
+                </label>
+                <input
+                  type="text"
+                  value={niceToHaveSkills}
+                  onChange={(e) => setNiceToHaveSkills(e.target.value)}
+                  placeholder="e.g. GraphQL, AWS, Docker"
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                    Years of Experience
+                  </label>
+                  <input
+                    type="text"
+                    value={experience}
+                    onChange={(e) => setExperience(e.target.value)}
+                    placeholder="e.g. 3"
+                    className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                    Education
+                  </label>
+                  <input
+                    type="text"
+                    value={education}
+                    onChange={(e) => setEducation(e.target.value)}
+                    placeholder="e.g. BS in Computer Science or equivalent"
+                    className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
                   />
                 </div>
               </div>
-
+            </div>
+            <div className="mt-8 flex justify-between">
               <button
-                onClick={handleGenerate}
-                disabled={loading}
-                className="mt-6 w-full bg-sky-500 hover:bg-sky-400 disabled:bg-sky-800 disabled:text-sky-400 text-white font-medium py-3 rounded-lg transition-colors"
+                onClick={() => setStep("role")}
+                className="rounded-lg border border-gray-700 px-6 py-2.5 font-medium text-gray-300 transition-colors hover:bg-gray-800"
               >
-                {loading ? "Generating..." : "Generate Job Posting"}
+                Back
+              </button>
+              <button
+                onClick={() => setStep("company")}
+                className="rounded-lg bg-violet-500 px-6 py-2.5 font-medium text-white transition-colors hover:bg-violet-600"
+              >
+                Next Step
               </button>
             </div>
+          </div>
+        )}
 
-            {/* History */}
-            {history.length > 0 && (
-              <div className="bg-gray-900 rounded-xl border border-gray-800 p-6">
-                <h2 className="text-lg font-semibold text-white mb-4">
-                  Job History
-                </h2>
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {history.map((job) => (
+        {/* Step: Company Info */}
+        {step === "company" && (
+          <div className="mx-auto max-w-2xl rounded-xl border border-gray-800 bg-gray-900 p-8">
+            <h2 className="mb-6 text-xl font-semibold text-white">Company Info</h2>
+            <div className="space-y-5">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                  Company Name
+                </label>
+                <input
+                  type="text"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  placeholder="e.g. Acme Inc."
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                  Mission Statement
+                </label>
+                <textarea
+                  value={mission}
+                  onChange={(e) => setMission(e.target.value)}
+                  placeholder="e.g. revolutionize how teams collaborate"
+                  rows={2}
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                  Benefits (comma separated)
+                </label>
+                <input
+                  type="text"
+                  value={benefits}
+                  onChange={(e) => setBenefits(e.target.value)}
+                  placeholder="e.g. Health insurance, 401k, Unlimited PTO"
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                  Culture Description
+                </label>
+                <textarea
+                  value={culture}
+                  onChange={(e) => setCulture(e.target.value)}
+                  placeholder="e.g. We value transparency, continuous learning, and work-life balance."
+                  rows={2}
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                />
+              </div>
+            </div>
+            <div className="mt-8 flex justify-between">
+              <button
+                onClick={() => setStep("requirements")}
+                className="rounded-lg border border-gray-700 px-6 py-2.5 font-medium text-gray-300 transition-colors hover:bg-gray-800"
+              >
+                Back
+              </button>
+              <button
+                onClick={() => setStep("tone")}
+                className="rounded-lg bg-violet-500 px-6 py-2.5 font-medium text-white transition-colors hover:bg-violet-600"
+              >
+                Next Step
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step: Tone & Style */}
+        {step === "tone" && (
+          <div className="mx-auto max-w-2xl rounded-xl border border-gray-800 bg-gray-900 p-8">
+            <h2 className="mb-6 text-xl font-semibold text-white">Tone & Style</h2>
+            <div className="space-y-5">
+              <div>
+                <label className="mb-3 block text-sm font-medium text-gray-300">
+                  Writing Tone
+                </label>
+                <div className="grid grid-cols-3 gap-3">
+                  {(
+                    [
+                      { value: "startup-casual", label: "Startup Casual", desc: "Friendly, relaxed, approachable" },
+                      { value: "corporate-formal", label: "Corporate Formal", desc: "Professional, polished, traditional" },
+                      { value: "creative", label: "Creative", desc: "Bold, inspiring, unique" },
+                    ] as const
+                  ).map((t) => (
                     <button
-                      key={job.id}
-                      onClick={() => handleSelectHistory(job.id)}
-                      className={`w-full text-left p-3 rounded-lg border transition-colors ${
-                        currentPosting?.id === job.id
-                          ? "border-sky-500 bg-sky-950/30"
+                      key={t.value}
+                      onClick={() => setTone(t.value)}
+                      className={`rounded-lg border p-4 text-left transition-colors ${
+                        tone === t.value
+                          ? "border-violet-500 bg-violet-500/10"
                           : "border-gray-700 bg-gray-800 hover:border-gray-600"
                       }`}
                     >
-                      <div className="text-sm font-medium text-white truncate">
-                        {job.title}
+                      <div className={`text-sm font-medium ${tone === t.value ? "text-violet-400" : "text-white"}`}>
+                        {t.label}
                       </div>
-                      <div className="text-xs text-gray-400 mt-1">
-                        {job.company} &middot;{" "}
-                        <span className={scoreColor(job.inclusivityScore)}>
-                          Score: {job.inclusivityScore}
-                        </span>
-                      </div>
+                      <div className="mt-1 text-xs text-gray-500">{t.desc}</div>
                     </button>
                   ))}
                 </div>
               </div>
-            )}
-          </div>
-
-          {/* Right column: Preview */}
-          <div className="lg:col-span-2 space-y-6">
-            {currentPosting ? (
-              <>
-                {/* Score and bias panel */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Inclusivity Score */}
-                  <div className="bg-gray-900 rounded-xl border border-gray-800 p-6">
-                    <h3 className="text-sm font-medium text-gray-400 mb-3">
-                      Inclusivity Score
-                    </h3>
-                    <div className="flex items-end gap-3">
-                      <span
-                        className={`text-4xl font-bold ${scoreColor(
-                          currentPosting.inclusivityScore
-                        )}`}
-                      >
-                        {currentPosting.inclusivityScore}
-                      </span>
-                      <span className="text-gray-500 text-sm mb-1">/ 100</span>
-                    </div>
-                    <div className="mt-3 w-full bg-gray-800 rounded-full h-2.5">
-                      <div
-                        className={`h-2.5 rounded-full transition-all ${scoreBg(
-                          currentPosting.inclusivityScore
-                        )}`}
-                        style={{
-                          width: `${currentPosting.inclusivityScore}%`,
-                        }}
-                      />
-                    </div>
-                    <p className="text-xs text-gray-500 mt-2">
-                      {currentPosting.inclusivityScore >= 75
-                        ? "Great! This posting is inclusive and welcoming."
-                        : currentPosting.inclusivityScore >= 50
-                        ? "Good, but there are some areas to improve."
-                        : "Needs work. Review the bias warnings below."}
-                    </p>
-                  </div>
-
-                  {/* Bias Detection */}
-                  <div className="bg-gray-900 rounded-xl border border-gray-800 p-6">
-                    <h3 className="text-sm font-medium text-gray-400 mb-3">
-                      Bias Detection
-                    </h3>
-                    {currentPosting.biasWarnings.length === 0 ? (
-                      <div className="flex items-center gap-2 text-green-400">
-                        <svg
-                          className="w-5 h-5"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M5 13l4 4L19 7"
-                          />
-                        </svg>
-                        <span className="text-sm font-medium">
-                          No bias detected
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="space-y-2 max-h-40 overflow-y-auto">
-                        {currentPosting.biasWarnings.map((w, i) => (
-                          <div
-                            key={i}
-                            className={`text-xs p-2 rounded-lg border ${severityColor(
-                              w.severity
-                            )}`}
-                          >
-                            <div className="font-medium">{w.text}</div>
-                            <div className="mt-1 opacity-80">
-                              {w.suggestion}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Posting Preview */}
-                <div className="bg-gray-900 rounded-xl border border-gray-800 p-6">
-                  <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-lg font-semibold text-white">
-                      Generated Posting
-                    </h2>
-                    <button
-                      onClick={handleCopy}
-                      className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-gray-300 px-4 py-2 rounded-lg text-sm transition-colors border border-gray-700"
-                    >
-                      {copied ? (
-                        <>
-                          <svg
-                            className="w-4 h-4 text-green-400"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M5 13l4 4L19 7"
-                            />
-                          </svg>
-                          Copied!
-                        </>
-                      ) : (
-                        <>
-                          <svg
-                            className="w-4 h-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                            />
-                          </svg>
-                          Copy Posting
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                  {/* Header info */}
-                  <div className="mb-6 pb-6 border-b border-gray-800">
-                    <h3 className="text-2xl font-bold text-white">
-                      {currentPosting.title}
-                    </h3>
-                    <div className="mt-2 flex flex-wrap gap-2 text-sm text-gray-400">
-                      <span>{currentPosting.company}</span>
-                      <span>&middot;</span>
-                      <span>{currentPosting.location}</span>
-                      <span>&middot;</span>
-                      <span className="capitalize">
-                        {currentPosting.workMode}
-                      </span>
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Tag label={currentPosting.employmentType} />
-                      <Tag label={currentPosting.experienceLevel} />
-                      <Tag label={currentPosting.department} />
-                      {currentPosting.salaryRange && (
-                        <Tag label={currentPosting.salaryRange} />
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Description */}
-                  <Section title="About the Role">
-                    <p className="text-gray-300 text-sm leading-relaxed">
-                      {currentPosting.description}
-                    </p>
-                  </Section>
-
-                  <Section title="Responsibilities">
-                    <ul className="space-y-2">
-                      {currentPosting.responsibilities.map((r, i) => (
-                        <li
-                          key={i}
-                          className="flex gap-2 text-sm text-gray-300"
-                        >
-                          <span className="text-sky-400 mt-0.5 shrink-0">
-                            &bull;
-                          </span>
-                          {r}
-                        </li>
-                      ))}
-                    </ul>
-                  </Section>
-
-                  <Section title="Qualifications">
-                    <ul className="space-y-2">
-                      {currentPosting.qualifications.map((q, i) => (
-                        <li
-                          key={i}
-                          className="flex gap-2 text-sm text-gray-300"
-                        >
-                          <span className="text-sky-400 mt-0.5 shrink-0">
-                            &bull;
-                          </span>
-                          {q}
-                        </li>
-                      ))}
-                    </ul>
-                  </Section>
-
-                  <Section title="Nice to Have">
-                    <ul className="space-y-2">
-                      {currentPosting.niceToHaves.map((n, i) => (
-                        <li
-                          key={i}
-                          className="flex gap-2 text-sm text-gray-300"
-                        >
-                          <span className="text-gray-500 mt-0.5 shrink-0">
-                            &bull;
-                          </span>
-                          {n}
-                        </li>
-                      ))}
-                    </ul>
-                  </Section>
-
-                  <Section title="Benefits">
-                    <ul className="space-y-2">
-                      {currentPosting.benefits.map((b, i) => (
-                        <li
-                          key={i}
-                          className="flex gap-2 text-sm text-gray-300"
-                        >
-                          <span className="text-green-400 mt-0.5 shrink-0">
-                            &bull;
-                          </span>
-                          {b}
-                        </li>
-                      ))}
-                    </ul>
-                  </Section>
-                </div>
-              </>
-            ) : (
-              /* Empty state */
-              <div className="bg-gray-900 rounded-xl border border-gray-800 p-12 flex flex-col items-center justify-center text-center">
-                <div className="w-16 h-16 rounded-2xl bg-sky-500/10 flex items-center justify-center mb-4">
-                  <svg
-                    className="w-8 h-8 text-sky-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={1.5}
-                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                    />
-                  </svg>
-                </div>
-                <h3 className="text-lg font-semibold text-white mb-2">
-                  Create Your First Job Posting
-                </h3>
-                <p className="text-sm text-gray-400 max-w-md">
-                  Fill in the role details on the left and click
-                  &ldquo;Generate&rdquo; to create an inclusive,
-                  bias-free job description.
-                </p>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                  Industry Template
+                </label>
+                <select
+                  value={templateId}
+                  onChange={(e) => setTemplateId(e.target.value)}
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-white focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                >
+                  <option value="tech-startup">Technology</option>
+                  <option value="healthcare">Healthcare</option>
+                  <option value="finance">Finance & Banking</option>
+                  <option value="education">Education</option>
+                  <option value="creative">Creative & Marketing</option>
+                </select>
               </div>
-            )}
+            </div>
+            <div className="mt-8 flex justify-between">
+              <button
+                onClick={() => setStep("company")}
+                className="rounded-lg border border-gray-700 px-6 py-2.5 font-medium text-gray-300 transition-colors hover:bg-gray-800"
+              >
+                Back
+              </button>
+              <button
+                onClick={handleGenerate}
+                disabled={loading}
+                className="rounded-lg bg-violet-500 px-8 py-2.5 font-medium text-white transition-colors hover:bg-violet-600 disabled:opacity-50"
+              >
+                {loading ? "Generating..." : "Generate Job Description"}
+              </button>
+            </div>
           </div>
-        </div>
-      </main>
-    </div>
+        )}
+
+        {/* Step: Result */}
+        {step === "result" && generatedJD && (
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            {/* Generated JD */}
+            <div className="lg:col-span-2 rounded-xl border border-gray-800 bg-gray-900 p-8">
+              <div className="mb-6 flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-white">Generated Job Description</h2>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleCopy}
+                    className="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-300 transition-colors hover:bg-gray-800"
+                  >
+                    {copied ? "Copied!" : "Copy"}
+                  </button>
+                  <button
+                    onClick={handleExport}
+                    className="rounded-lg bg-violet-500 px-4 py-2 text-sm text-white transition-colors hover:bg-violet-600"
+                  >
+                    Export .md
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-6 text-gray-300">
+                <section>
+                  <h3 className="mb-2 text-lg font-semibold text-violet-400">About Us</h3>
+                  <p>{generatedJD.aboutUs}</p>
+                </section>
+                <section>
+                  <h3 className="mb-2 text-lg font-semibold text-violet-400">Role Overview</h3>
+                  <p>{generatedJD.roleOverview}</p>
+                </section>
+                <section>
+                  <h3 className="mb-2 text-lg font-semibold text-violet-400">Responsibilities</h3>
+                  <ul className="list-disc space-y-1 pl-5">
+                    {generatedJD.responsibilities.map((r, i) => (
+                      <li key={i}>{r}</li>
+                    ))}
+                  </ul>
+                </section>
+                <section>
+                  <h3 className="mb-2 text-lg font-semibold text-violet-400">Requirements</h3>
+                  <h4 className="mb-1 text-sm font-medium text-gray-400">Must Have</h4>
+                  <ul className="list-disc space-y-1 pl-5">
+                    {generatedJD.mustHaveRequirements.map((r, i) => (
+                      <li key={i}>{r}</li>
+                    ))}
+                  </ul>
+                  {generatedJD.niceToHaveRequirements.length > 0 && (
+                    <>
+                      <h4 className="mb-1 mt-3 text-sm font-medium text-gray-400">Nice to Have</h4>
+                      <ul className="list-disc space-y-1 pl-5">
+                        {generatedJD.niceToHaveRequirements.map((r, i) => (
+                          <li key={i}>{r}</li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                </section>
+                <section>
+                  <h3 className="mb-2 text-lg font-semibold text-violet-400">Benefits</h3>
+                  <ul className="list-disc space-y-1 pl-5">
+                    {generatedJD.benefits.map((b, i) => (
+                      <li key={i}>{b}</li>
+                    ))}
+                  </ul>
+                </section>
+                <section>
+                  <h3 className="mb-2 text-lg font-semibold text-violet-400">How to Apply</h3>
+                  <p>{generatedJD.howToApply}</p>
+                </section>
+              </div>
+
+              <div className="mt-8">
+                <button
+                  onClick={() => setStep("role")}
+                  className="rounded-lg border border-gray-700 px-6 py-2.5 font-medium text-gray-300 transition-colors hover:bg-gray-800"
+                >
+                  Start Over
+                </button>
+              </div>
+            </div>
+
+            {/* Bias Detection Panel */}
+            <div className="rounded-xl border border-gray-800 bg-gray-900 p-6">
+              <h2 className="mb-4 text-lg font-semibold text-white">Bias Detection</h2>
+              {biasResult && (
+                <>
+                  <div className="mb-6 text-center">
+                    <div
+                      className={`inline-flex h-20 w-20 items-center justify-center rounded-full text-2xl font-bold ${
+                        biasResult.score >= 80
+                          ? "bg-green-500/20 text-green-400"
+                          : biasResult.score >= 50
+                            ? "bg-yellow-500/20 text-yellow-400"
+                            : "bg-red-500/20 text-red-400"
+                      }`}
+                    >
+                      {biasResult.score}
+                    </div>
+                    <p className="mt-2 text-sm text-gray-400">Inclusivity Score</p>
+                    <p className="text-xs text-gray-500">
+                      {biasResult.totalIssues} issue{biasResult.totalIssues !== 1 ? "s" : ""} found
+                    </p>
+                  </div>
+
+                  {biasResult.matches.length === 0 ? (
+                    <div className="rounded-lg bg-green-500/10 p-4 text-center text-sm text-green-400">
+                      No biased or exclusionary language detected. Great job!
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {biasResult.matches.map((match, i) => (
+                        <div
+                          key={i}
+                          className="rounded-lg border border-gray-700 bg-gray-800 p-3"
+                        >
+                          <div className="flex items-start justify-between">
+                            <span className="font-mono text-sm text-red-400">
+                              &quot;{match.term}&quot;
+                            </span>
+                            <span className="rounded-full bg-gray-700 px-2 py-0.5 text-xs text-gray-400">
+                              {match.category}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs text-gray-400">{match.explanation}</p>
+                          <p className="mt-1 text-xs text-violet-400">
+                            Suggest: {match.suggestion}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </main>
   );
-}
-
-/* --- Helper Components --- */
-
-function Field({
-  label,
-  name,
-  value,
-  onChange,
-  placeholder,
-}: {
-  label: string;
-  name: string;
-  value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  placeholder?: string;
-}) {
-  return (
-    <div>
-      <label className="block text-sm font-medium text-gray-300 mb-1">
-        {label}
-      </label>
-      <input
-        type="text"
-        name={name}
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
-      />
-    </div>
-  );
-}
-
-function SelectField({
-  label,
-  name,
-  value,
-  onChange,
-  options,
-}: {
-  label: string;
-  name: string;
-  value: string;
-  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
-  options: readonly string[];
-}) {
-  return (
-    <div>
-      <label className="block text-sm font-medium text-gray-300 mb-1">
-        {label}
-      </label>
-      <select
-        name={name}
-        value={value}
-        onChange={onChange}
-        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
-      >
-        {options.map((o) => (
-          <option key={o} value={o}>
-            {o.charAt(0).toUpperCase() + o.slice(1)}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
-function Tag({ label }: { label: string }) {
-  return (
-    <span className="inline-block bg-sky-500/10 text-sky-300 text-xs font-medium px-2.5 py-1 rounded-full border border-sky-500/20 capitalize">
-      {label}
-    </span>
-  );
-}
-
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="mb-6">
-      <h4 className="text-sm font-semibold text-sky-400 uppercase tracking-wider mb-3">
-        {title}
-      </h4>
-      {children}
-    </div>
-  );
-}
-
-function formatPostingAsText(p: JobPosting): string {
-  const lines = [
-    p.title,
-    `${p.company} | ${p.location} | ${p.workMode}`,
-    `${p.employmentType} | ${p.experienceLevel}`,
-    p.salaryRange ? `Salary: ${p.salaryRange}` : "",
-    "",
-    "ABOUT THE ROLE",
-    p.description,
-    "",
-    "RESPONSIBILITIES",
-    ...p.responsibilities.map((r) => `- ${r}`),
-    "",
-    "QUALIFICATIONS",
-    ...p.qualifications.map((q) => `- ${q}`),
-    "",
-    "NICE TO HAVE",
-    ...p.niceToHaves.map((n) => `- ${n}`),
-    "",
-    "BENEFITS",
-    ...p.benefits.map((b) => `- ${b}`),
-  ];
-  return lines.filter((l) => l !== undefined).join("\n");
 }

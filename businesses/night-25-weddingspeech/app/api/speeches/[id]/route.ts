@@ -3,9 +3,10 @@ import { getSpeech } from "../../store";
 
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const speech = getSpeech(params.id);
+  const { id } = await params;
+  const speech = getSpeech(id);
   if (!speech) {
     return NextResponse.json({ error: "Speech not found" }, { status: 404 });
   }

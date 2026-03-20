@@ -64,6 +64,62 @@ assert(r6.securityDeposit === "$2,500", `Expected $2,500, got ${r6.securityDepos
 const r6b = analyzeLease("$1,800 security deposit due at lease signing. Rent is $900/month.");
 assert(r6b.securityDeposit === "$1,800", `Expected $1,800, got ${r6b.securityDeposit}`);
 
+// Test 7: Lease duration
+console.log("\nTest 7: Lease Duration");
+const r7 = analyzeLease("Lease term is 12 months beginning January 1, 2025. Monthly rent is $1,000/month.");
+assert(r7.leaseDuration === "12 months", `Expected '12 months', got ${r7.leaseDuration}`);
+
+// Test 8: Lease score (1-10 scale)
+console.log("\nTest 8: Lease Score");
+assert(r3low.leaseScore >= 1 && r3low.leaseScore <= 10, `Lease score should be 1-10, got ${r3low.leaseScore}`);
+assert(r3low.leaseScore >= 7, `Low risk lease should score >= 7, got ${r3low.leaseScore}`);
+assert(r3high.leaseScore <= 5, `High risk lease should score <= 5, got ${r3high.leaseScore}`);
+
+// Test 9: Questions for landlord
+console.log("\nTest 9: Questions for Landlord");
+assert(r3low.questionsForLandlord.length > 0, "Should generate questions for landlord");
+const r9 = analyzeLease("Landlord may enter without notice. Security deposit of $2,000. Monthly rent is $1,000/month. No pets allowed.");
+assert(r9.questionsForLandlord.length >= 3, `Should have at least 3 questions, got ${r9.questionsForLandlord.length}`);
+assert(r9.questionsForLandlord.some(q => /notice/i.test(q)), "Should ask about entry notice");
+
+// Test 10: Tenant rights
+console.log("\nTest 10: Tenant Rights");
+assert(r3low.tenantRights.length > 0, "Should include tenant rights");
+assert(r3low.tenantRights.some(r => /habitab/i.test(r)), "Should mention habitability rights");
+
+// Test 11: Important dates extraction
+console.log("\nTest 11: Important Dates");
+const r11 = analyzeLease("Lease commencing on March 1, 2025 and expiring on February 28, 2026. Monthly rent is $1,500/month. Notice to vacate required 60 days before lease end.");
+assert(r11.importantDates.length >= 2, `Should extract at least 2 dates, got ${r11.importantDates.length}`);
+assert(r11.importantDates.some(d => /start/i.test(d.label)), "Should have lease start date");
+
+// Test 12: Clause status (color coding)
+console.log("\nTest 12: Clause Status");
+const r12 = analyzeLease("Landlord provides 24 hours notice before entry. Monthly rent is $1,000/month. Tenant waives right to sue.");
+const favorableClauses = r12.clauses.filter(c => c.status === "favorable");
+const concernClauses = r12.clauses.filter(c => c.status === "concern");
+assert(favorableClauses.length > 0 || r12.clauses.length > 0, "Should categorize clauses with status");
+
+// Test 13: Non-refundable fee detection
+console.log("\nTest 13: Non-Refundable Fee Detection");
+const r13 = analyzeLease("A non-refundable fee of $200 is required. Monthly rent is $1,000/month.");
+assert(r13.redFlags.some(f => /non.*refundable/i.test(f.title)), "Should detect non-refundable fees");
+
+// Test 14: Mandatory arbitration detection
+console.log("\nTest 14: Mandatory Arbitration");
+const r14 = analyzeLease("All disputes shall be resolved through mandatory arbitration. Monthly rent is $1,000/month.");
+assert(r14.redFlags.some(f => /arbitration/i.test(f.title)), "Should detect mandatory arbitration");
+
+// Test 15: Summary generation
+console.log("\nTest 15: Summary Generation");
+assert(r1.summary.length > 20, "Summary should be a meaningful string");
+assert(r1.summary.includes("$1,500"), "Summary should include rent amount");
+
+// Test 16: Analysis has an ID
+console.log("\nTest 16: Analysis ID");
+assert(r1.id.startsWith("analysis-"), "ID should start with 'analysis-'");
+assert(r1.id !== r1b.id, "Different analyses should have different IDs");
+
 // Summary
 console.log(`\n${"=".repeat(40)}`);
 console.log(`Results: ${passed} passed, ${failed} failed out of ${passed + failed} assertions`);

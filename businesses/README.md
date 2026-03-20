@@ -145,75 +145,80 @@ Based on extensive research of Claude Code's capabilities, here's how we leverag
 ### TIER 4: Small Business Tools (Nights 16-20)
 *Non-technical users will pay premium for simplicity.*
 
-#### Night 16: **InvoiceAI** - Smart Invoice Generator
-- **What:** Describe work done, get professional invoice with line items auto-generated
-- **Revenue:** Free for 3/mo, $12/mo unlimited
-- **Stack:** Next.js + Claude API + PDF generation
-- **Why overnight:** Form → AI structuring → PDF output
-- **Team:** Frontend (invoice preview) + Backend (AI + PDF) + Templates (invoice designs)
+#### Night 16: **RFPReply** - AI RFP & Grant Response Writer *(Viability: 7.2/10)*
+- **What:** Paste an RFP or grant application, input company details, get tailored draft responses for each section
+- **Revenue:** $29 per RFP response or $79/mo unlimited
+- **Stack:** Next.js + Claude API + document templates
+- **Why overnight:** Paste RFP → parse sections → generate responses from company profile
+- **Team:** Frontend (response editor) + Backend (RFP parser + generator) + Profiles (company data)
+- **Replaces:** InvoiceAI (4/10 — oversaturated, free alternatives too strong)
 
-#### Night 17: **ReviewReply** - Google Review Response Writer
+#### Night 17: **ReviewReply** - Google Review Response Writer *(Viability: 6.0/10)*
 - **What:** Paste customer reviews, get professional response suggestions
 - **Revenue:** $19/mo per business location
 - **Stack:** Next.js + Claude API + tone controls
 - **Why overnight:** Input → AI with persona → formatted responses
 - **Team:** Frontend (review dashboard) + Backend (response gen) + Tone (persona engine)
 
-#### Night 18: **MenuMaker** - Restaurant Menu Builder
-- **What:** Input dishes and prices, get a beautiful digital menu with QR code
-- **Revenue:** $15/mo per restaurant
-- **Stack:** Next.js + Tailwind + QR generation
-- **Why overnight:** Template-driven with customization. Mostly frontend.
-- **Team:** Frontend (menu designer) + Backend (data/QR) + Templates (menu themes)
+#### Night 18: **OnboardKit** - Employee Onboarding Document Generator *(Viability: 6.8/10)*
+- **What:** Input company info and role details, get a complete onboarding packet with welcome letter, schedule, checklists
+- **Revenue:** $15 per packet or $39/mo unlimited
+- **Stack:** Next.js + Claude API + PDF export
+- **Why overnight:** Form → template generation → structured document output
+- **Team:** Frontend (wizard UI) + Backend (packet generator) + Templates (section designs)
+- **Replaces:** MenuMaker (3/10 — race-to-bottom pricing, dozens of competitors)
 
-#### Night 19: **HireWrite** - Job Description Generator
+#### Night 19: **HireWrite** - Job Description Generator *(Viability: 5.0/10)*
 - **What:** Input role details, get an inclusive, optimized job posting
 - **Revenue:** $5 per post or $29/mo unlimited
 - **Stack:** Next.js + Claude API + bias detection
 - **Why overnight:** Structured input → AI generation with guidelines
 - **Team:** Frontend (job wizard) + Backend (AI generation) + Quality (bias checker)
 
-#### Night 20: **MeetingMemo** - Meeting Notes Summarizer
-- **What:** Paste meeting transcript, get action items, decisions, and summary
-- **Revenue:** $15/mo individual, $49/mo team
-- **Stack:** Next.js + Claude API + export formats
-- **Why overnight:** Transcript → structured extraction. Core AI task.
-- **Team:** Frontend (notes viewer) + Backend (AI extraction) + Export (PDF/Notion/Slack)
+#### Night 20: **ProposalForge** - Freelancer Proposal & Quote Generator *(Viability: 6.0/10)*
+- **What:** Input project details, client info, and rates — get a professional proposal with scope, timeline, and pricing
+- **Revenue:** $9/mo for 10 proposals, $29/mo unlimited
+- **Stack:** Next.js + Claude API + PDF generation
+- **Why overnight:** Form → structured proposal generation → formatted output
+- **Team:** Frontend (proposal builder) + Backend (generator) + Templates (proposal styles)
+- **Replaces:** MeetingMemo (2/10 — most oversaturated AI category)
 
 ---
 
 ### TIER 5: Niche/Creative Businesses (Nights 21-25)
 *Unique ideas with less competition. Higher margins.*
 
-#### Night 21: **NameForge** - Business Name Generator + Domain Checker
-- **What:** Describe your business, get creative names with instant domain availability
-- **Revenue:** $5 one-time or $9/mo for saved searches
-- **Stack:** Next.js + Claude API + domain availability API
-- **Why overnight:** AI naming + API check. Fast and valuable.
-- **Team:** Frontend (name cards) + Backend (AI + domain API) + Data (TLD checking)
+#### Night 21: **Velocity** - AI Academic Advisor Platform *(Viability: 8.0/10)*
+- **What:** AI-powered academic advising platform with degree tracking, career pathways, and institutional analytics
+- **Revenue:** $50K-$250K annual fee + $20-30/student (B2B to universities)
+- **Stack:** Next.js + Claude API + dual interface (student + admin)
+- **Why overnight:** Student-centered AI fills gap left by advisor-centered incumbents (EAB Navigate, Starfish)
+- **Team:** Frontend (dual dashboards) + Backend (advising engine) + Data (degree/career mappings)
+- **Replaces:** NameForge (3/10 — hopelessly oversaturated, free tools from major platforms)
 
-#### Night 22: **PitchDeck** - AI Pitch Deck Outline Generator
+#### Night 22: **PitchDeck** - AI Pitch Deck Outline Generator *(Viability: 5.0/10)*
 - **What:** Describe your startup, get a structured pitch deck outline with talking points
 - **Revenue:** $19 per deck or $39/mo unlimited
 - **Stack:** Next.js + Claude API + slide framework
 - **Why overnight:** Structured output from business description input
 - **Team:** Frontend (slide preview) + Backend (deck generation) + Templates (slide designs)
 
-#### Night 23: **CommitPoet** - Fun Git Commit Message Generator
-- **What:** Paste your diff, get creative/funny commit messages (or professional ones)
-- **Revenue:** Free tool with sponsorships + premium personas
-- **Stack:** Next.js + Claude API + Git diff parser
-- **Why overnight:** Tiny product, high virality potential
-- **Team:** Frontend (diff viewer) + Backend (message gen) + Fun (persona library)
+#### Night 23: **GrantScout** - Small Business Grant Finder & Application Helper *(Viability: 6.0/10)*
+- **What:** Input business details, get matched to eligible grants with application drafting assistance
+- **Revenue:** $19/mo for grant matching, $49/mo with AI application drafting
+- **Stack:** Next.js + Claude API + grant database
+- **Why overnight:** Curated grant database + matching logic + draft generation
+- **Team:** Frontend (grant browser) + Backend (matching engine) + Data (grant database)
+- **Replaces:** CommitPoet (2/10 — fun novelty, not a business)
 
-#### Night 24: **LeaseEye** - Apartment Lease Analyzer
-- **What:** Upload lease PDF, get plain-English summary of key terms and red flags
+#### Night 24: **LeaseEye** - Apartment Lease Analyzer *(Viability: 7.0/10)*
+- **What:** Paste lease text, get plain-English summary of key terms and red flags
 - **Revenue:** $9 per analysis or $19/mo
-- **Stack:** Next.js + PDF parsing + Claude API
-- **Why overnight:** PDF extraction → AI analysis pipeline
-- **Team:** Frontend (report view) + Backend (PDF parser) + AI (legal analysis)
+- **Stack:** Next.js + pattern matching + clause analysis
+- **Why overnight:** Text analysis → pattern extraction → structured report
+- **Team:** Frontend (report view) + Backend (lease parser) + Analysis (red flag detection)
 
-#### Night 25: **WeddingSpeech** - Wedding Speech Writer
+#### Night 25: **WeddingSpeech** - Wedding Speech Writer *(Viability: 6.0/10)*
 - **What:** Input details about the couple, get a heartfelt, personalized speech
 - **Revenue:** $15 per speech
 - **Stack:** Next.js + Claude API + tone/length controls

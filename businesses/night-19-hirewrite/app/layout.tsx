@@ -2,9 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "HireWrite - Inclusive Job Description Generator",
-  description:
-    "Generate optimized, bias-free job postings with inclusivity scoring and smart suggestions.",
+  title: "HireWrite - Job Description Generator",
+  description: "Generate inclusive, optimized job postings with bias detection",
 };
 
 export default function RootLayout({
@@ -13,8 +12,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className="bg-gray-950 text-gray-100 min-h-screen antialiased">
+    <html lang="en" className="dark">
+      <body className="min-h-screen bg-gray-950 text-gray-100 antialiased">
         {children}
       </body>
     </html>
