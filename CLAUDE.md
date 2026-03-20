@@ -11,6 +11,10 @@ Rapidly build and deploy micro-businesses using Claude Code agent teams. Each bu
 - Keep dependencies minimal - ship fast
 
 ## Workflow
+- **Before building any new business idea, run `/market-research` to evaluate viability**
+  - Ideas scoring 8+: Invest extra attention in quality, do deep research
+  - Ideas scoring 4 or below: Drop and replace with a stronger idea
+  - Ideas scoring 5-7: Build but note risks
 - Use agent teams for parallel development (frontend + backend + tests)
 - Run `npm test` before committing
 - Each business lives in its own directory under `businesses/`
