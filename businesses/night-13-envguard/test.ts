@@ -1,7 +1,7 @@
 // EnvGuard Test Suite
 // Run: npx tsx test.ts
 
-const BASE_URL = "http://localhost:3000";
+const BASE_URL = process.env.BASE_URL || "http://localhost:3000";
 
 interface TestResult {
   name: string;
