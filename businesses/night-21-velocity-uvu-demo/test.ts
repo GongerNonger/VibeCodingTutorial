@@ -48,7 +48,7 @@ assert(mckenna !== undefined, "Student STU-001 (McKenna Johnson) exists");
 assert(mckenna.major === "Computer Science", "McKenna is a CS major");
 assert(mckenna.email.endsWith("@uvu.edu"), "McKenna has UVU email");
 assert((mckenna as any).uvid !== undefined, "McKenna has a UVID");
-assert((mckenna as any).college === "College of Engineering & Technology", "McKenna is in Engineering & Tech");
+assert((mckenna as any).college === "Scott M. Smith College of Engineering & Technology", "McKenna is in Engineering & Tech");
 assert(mckenna.skills.length > 0, "McKenna has skills listed");
 assert(mckenna.careerGoals.length > 0, "McKenna has career goals");
 assert(mckenna.gpa > 0 && mckenna.gpa <= 4.0, "McKenna has a valid GPA");
@@ -118,7 +118,7 @@ const lowGPAStudent: Student = {
   uvid: "99999999",
   major: "Computer Science",
   minor: null,
-  college: "College of Engineering & Technology",
+  college: "Scott M. Smith College of Engineering & Technology",
   enrollmentYear: 2022,
   expectedGraduation: "Spring 2026",
   completedCredits: 40,
